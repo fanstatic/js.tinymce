@@ -4,7 +4,7 @@ CHANGES
 3.4.3.3 (unreleased)
 ====================
 
-- Nothing changed yet.
+- Make tiny_mce_popup.js available as a Fanstatic Resource.
 
 
 3.4.3.2 (2011-08-02)
