@@ -4,7 +4,7 @@ CHANGES
 3.4.6 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Add nl/de/es translations.
 
 
 3.4.5 (2011-09-28)
