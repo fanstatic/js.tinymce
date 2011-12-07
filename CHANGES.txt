@@ -1,10 +1,10 @@
 CHANGES
 *******
 
-3.4.6 (unreleased)
+3.4.5-2 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Correctly added nl/de/es translations.
 
 
 3.4.5-1 (2011-11-24)
