@@ -4,7 +4,7 @@ CHANGES
 3.4.5-3 (unreleased)
 ====================
 
-- Nothing changed yet.
+- Updated to release 3.5.2
 
 
 3.4.5-2 (2011-12-07)
