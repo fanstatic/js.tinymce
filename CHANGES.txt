@@ -4,7 +4,7 @@ CHANGES
 3.5.3 (unreleased)
 ==================
 
-- Nothing changed yet.
+- Added all available translation files.
 
 
 3.5.2 (2012-06-05)
