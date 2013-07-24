@@ -1,6 +1,12 @@
 CHANGES
 *******
 
+3.6.0dev (unreleased)
+====================
+
+- Include tinymce version 4.x
+
+
 3.5.2-2 (unreleased)
 ====================
 
