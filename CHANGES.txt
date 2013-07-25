@@ -1,16 +1,10 @@
 CHANGES
 *******
 
-4.0.2 (unrelesead)
-====================
+4.0.2 (2013-07-25)
+==================
 
-- Updated to tinymce version 4.0.2
-
-
-3.5.2-2 (unreleased)
-====================
-
-- Nothing changed yet.
+- Updated to TinyMCE version 4.0.2.
 
 
 3.5.2-1 (2012-07-02)
