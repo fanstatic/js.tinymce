@@ -22,10 +22,9 @@ define("tinymce/dom/ControlSelection", [
 ], function(VK, Tools, Env) {
 	return function(selection, editor) {
 		var dom = editor.dom, each = Tools.each;
-		var selectedElm, selectedElmGhost, resizeHandles, selectedHandle;
+		var selectedElm, selectedElmGhost, resizeHandles, selectedHandle, lastMouseDownEvent;
 		var startX, startY, selectedElmX, selectedElmY, startW, startH, ratio, resizeStarted;
-		var width, height, editableDoc = editor.getDoc(), rootDocument = document, isIE = Env.ie;
-		var lastMouseDownEvent;
+		var width, height, editableDoc = editor.getDoc(), rootDocument = document, isIE = Env.ie && Env.ie < 11;
 
 		// Details about each resize handle how to scale etc
 		resizeHandles = {
@@ -164,10 +163,10 @@ define("tinymce/dom/ControlSelection", [
 		}
 
 		function showResizeRect(targetElm, mouseDownHandleName, mouseDownEvent) {
-			var position, targetWidth, targetHeight, e, rect;
+			var position, targetWidth, targetHeight, e, rect, offsetParent = editor.getBody();
 
 			// Get position and size of target
-			position = dom.getPos(targetElm, editor.getBody());
+			position = dom.getPos(targetElm, offsetParent);
 			selectedElmX = position.x;
 			selectedElmY = position.y;
 			rect = targetElm.getBoundingClientRect(); // Fix for Gecko offsetHeight for table with caption
@@ -429,9 +428,27 @@ define("tinymce/dom/ControlSelection", [
 				});
 			} else {
 				disableGeckoResize();
+
+				if (Env.ie >= 11) {
+					// TODO: Drag/drop doesn't work
+					editor.on('mouseup', function(e) {
+						var nodeName = e.target.nodeName;
+
+						if (/^(TABLE|IMG|HR)$/.test(nodeName)) {
+							editor.selection.select(e.target, nodeName == 'TABLE');
+							editor.nodeChanged();
+						}
+					});
+
+					editor.dom.bind(editor.getBody(), 'mscontrolselect', function(e) {
+						if (/^(TABLE|IMG|HR)$/.test(e.target.nodeName)) {
+							e.preventDefault();
+						}
+					});
+				}
 			}
 
-			editor.on('nodechange mousedown ResizeEditor', updateResizeRect);
+			editor.on('nodechange mousedown mouseup ResizeEditor', updateResizeRect);
 
 			// Update resize rect while typing in a table
 			editor.on('keydown keyup', function(e) {

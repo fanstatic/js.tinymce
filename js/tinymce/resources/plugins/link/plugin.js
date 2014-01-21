@@ -48,7 +48,7 @@ tinymce.PluginManager.add('link', function(editor) {
 			tinymce.each(linkList, function(link) {
 				linkListItems.push({
 					text: link.text || link.title,
-					value: link.value || link.url,
+					value: editor.convertURL(link.value || link.url, 'href'),
 					menu: link.menu
 				});
 			});
@@ -116,7 +116,11 @@ tinymce.PluginManager.add('link', function(editor) {
 			}
 		}
 
-		function updateText() {
+		function urlChange() {
+			if (linkListCtrl) {
+				linkListCtrl.value(editor.convertURL(this.value(), 'href'));
+			}
+
 			if (!initialText && data.text.length === 0) {
 				this.parent().parent().find('#text')[0].value(this.value());
 			}
@@ -124,11 +128,8 @@ tinymce.PluginManager.add('link', function(editor) {
 
 		selectedElm = selection.getNode();
 		anchorElm = dom.getParent(selectedElm, 'a[href]');
-		if (anchorElm) {
-			selection.select(anchorElm);
-		}
 
-		data.text = initialText = selection.getContent({format: 'text'});
+		data.text = initialText = anchorElm ? (anchorElm.innerText || anchorElm.textContent) : selection.getContent({format: 'text'});
 		data.href = anchorElm ? dom.getAttrib(anchorElm, 'href') : '';
 		data.target = anchorElm ? dom.getAttrib(anchorElm, 'target') : '';
 		data.rel = anchorElm ? dom.getAttrib(anchorElm, 'rel') : '';
@@ -142,7 +143,11 @@ tinymce.PluginManager.add('link', function(editor) {
 				type: 'listbox',
 				label: 'Link list',
 				values: buildLinkList(),
-				onselect: linkListChangeHandler
+				onselect: linkListChangeHandler,
+				value: editor.convertURL(data.href, 'href'),
+				onPostRender: function() {
+					linkListCtrl = this;
+				}
 			};
 		}
 
@@ -175,8 +180,8 @@ tinymce.PluginManager.add('link', function(editor) {
 					size: 40,
 					autofocus: true,
 					label: 'Url',
-					onchange: updateText,
-					onkeyup: updateText
+					onchange: urlChange,
+					onkeyup: urlChange
 				},
 				{name: 'text', type: 'textbox', size: 40, label: 'Text to display', onchange: function() {
 					data.text = this.value();
@@ -191,8 +196,13 @@ tinymce.PluginManager.add('link', function(editor) {
 
 				// Delay confirm since onSubmit will move focus
 				function delayedConfirm(message, callback) {
+					var rng = editor.selection.getRng();
+
 					window.setTimeout(function() {
-						editor.windowManager.confirm(message, callback);
+						editor.windowManager.confirm(message, function(state) {
+							editor.selection.setRng(rng);
+							callback(state);
+						});
 					}, 0);
 				}
 
