@@ -17,8 +17,9 @@
 define("tinymce/EditorCommands", [
 	"tinymce/html/Serializer",
 	"tinymce/Env",
-	"tinymce/util/Tools"
-], function(Serializer, Env, Tools) {
+	"tinymce/util/Tools",
+	"tinymce/dom/ElementUtils"
+], function(Serializer, Env, Tools, ElementUtils) {
 	// Added for compression purposes
 	var each = Tools.each, extend = Tools.extend;
 	var map = Tools.map, inArray = Tools.inArray, explode = Tools.explode;
@@ -313,7 +314,8 @@ define("tinymce/EditorCommands", [
 
 			mceInsertContent: function(command, ui, value) {
 				var parser, serializer, parentNode, rootNode, fragment, args;
-				var marker, rng, node, node2, bookmarkHtml;
+				var marker, rng, node, node2, bookmarkHtml, merge;
+				var textInlineElements = editor.schema.getTextInlineElements();
 
 				function trimOrPaddLeftRight(html) {
 					var rng, container, offset;
@@ -341,6 +343,37 @@ define("tinymce/EditorCommands", [
 					}
 
 					return html;
+				}
+
+				function markInlineFormatElements(fragment) {
+					if (merge) {
+						for (node = fragment.firstChild; node; node = node.walk(true)) {
+							if (textInlineElements[node.name]) {
+								node.attr('data-mce-new', "true");
+							}
+						}
+					}
+				}
+
+				function reduceInlineTextElements() {
+					if (merge) {
+						var root = editor.getBody(), elementUtils = new ElementUtils(dom);
+
+						each(dom.select('*[data-mce-new]'), function(node) {
+							node.removeAttribute('data-mce-new');
+
+							for (var testNode = node.parentNode; testNode && testNode != root; testNode = testNode.parentNode) {
+								if (elementUtils.compare(testNode, node)) {
+									dom.remove(node, true);
+								}
+							}
+						});
+					}
+				}
+
+				if (typeof(value) != 'string') {
+					merge = value.merge;
+					value = value.content;
 				}
 
 				// Check for whitespace before/after value
@@ -389,6 +422,8 @@ define("tinymce/EditorCommands", [
 				// Parse the fragment within the context of the parent node
 				var parserArgs = {context: parentNode.nodeName.toLowerCase()};
 				fragment = parser.parse(value, parserArgs);
+
+				markInlineFormatElements(fragment);
 
 				// Move the caret to a more suitable location
 				node = fragment.lastChild;
@@ -456,6 +491,8 @@ define("tinymce/EditorCommands", [
 					}
 				}
 
+				reduceInlineTextElements();
+
 				marker = dom.get('mce_marker');
 				selection.scrollIntoView(marker);
 
@@ -522,10 +559,10 @@ define("tinymce/EditorCommands", [
 					}
 
 					each(selection.getSelectedBlocks(), function(element) {
-						var indentStyleName;
-
 						if (element.nodeName != "LI") {
-							indentStyleName = dom.getStyle(element, 'direction', true) == 'rtl' ? 'paddingRight' : 'paddingLeft';
+							var indentStyleName = editor.getParam('indent_use_margin', false) ? 'margin' : 'padding';
+
+							indentStyleName += dom.getStyle(element, 'direction', true) == 'rtl' ? 'Right' : 'Left';
 
 							if (command == 'outdent') {
 								value = Math.max(0, parseInt(element.style[indentStyleName] || 0, 10) - intentValue);

@@ -15,7 +15,10 @@ tinymce.PluginManager.add('image', function(editor) {
 		var img = document.createElement('img');
 
 		function done(width, height) {
-			img.parentNode.removeChild(img);
+			if (img.parentNode) {
+				img.parentNode.removeChild(img);
+			}
+
 			callback({width: width, height: height});
 		}
 
@@ -27,8 +30,6 @@ tinymce.PluginManager.add('image', function(editor) {
 			done();
 		};
 
-		img.src = url;
-
 		var style = img.style;
 		style.visibility = 'hidden';
 		style.position = 'fixed';
@@ -36,6 +37,17 @@ tinymce.PluginManager.add('image', function(editor) {
 		style.width = style.height = 'auto';
 
 		document.body.appendChild(img);
+		img.src = url;
+	}
+
+	function applyPreview(items) {
+		tinymce.each(items, function(item) {
+			item.textStyle = function() {
+				return editor.formatter.getCssText({inline: 'img', classes: [item.value]});
+			};
+		});
+
+		return items;
 	}
 
 	function createImageList(callback) {
@@ -49,6 +61,8 @@ tinymce.PluginManager.add('image', function(editor) {
 						callback(tinymce.util.JSON.parse(text));
 					}
 				});
+			} else if (typeof(imageList) == "function") {
+				imageList(callback);
 			} else {
 				callback(imageList);
 			}
@@ -57,23 +71,55 @@ tinymce.PluginManager.add('image', function(editor) {
 
 	function showDialog(imageList) {
 		var win, data = {}, dom = editor.dom, imgElm = editor.selection.getNode();
-		var width, height, imageListCtrl;
+		var width, height, imageListCtrl, classListCtrl;
 
-		function buildImageList() {
-			var imageListItems = [{text: 'None', value: ''}];
+		function buildValues(listSettingName, dataItemName, defaultItems) {
+			var selectedItem, items = [];
 
-			tinymce.each(imageList, function(image) {
-				imageListItems.push({
-					text: image.text || image.title,
-					value: editor.convertURL(image.value || image.url, 'src'),
-					menu: image.menu
-				});
+			tinymce.each(editor.settings[listSettingName] || defaultItems, function(target) {
+				var item = {
+					text: target.text || target.title,
+					value: target.value
+				};
+
+				items.push(item);
+
+				if (data[dataItemName] === target.value || (!selectedItem && target.selected)) {
+					selectedItem = item;
+				}
 			});
 
-			return imageListItems;
+			if (selectedItem && !data[dataItemName]) {
+				data[dataItemName] = selectedItem.value;
+				selectedItem.selected = true;
+			}
+
+			return items;
 		}
 
-		function recalcSize(e) {
+		function buildImageList() {
+			function appendItems(values, output) {
+				output = output || [];
+
+				tinymce.each(values, function(value) {
+					var item = {text: value.text || value.title};
+
+					if (value.menu) {
+						item.menu = appendItems(value.menu);
+					} else {
+						item.value = editor.convertURL(value.value || value.url, 'src');
+					}
+
+					output.push(item);
+				});
+
+				return output;
+			}
+
+			return appendItems(imageList, [{text: 'None', value: ''}]);
+		}
+
+		function recalcSize() {
 			var widthCtrl, heightCtrl, newWidth, newHeight;
 
 			widthCtrl = win.find('#width')[0];
@@ -83,7 +129,7 @@ tinymce.PluginManager.add('image', function(editor) {
 			newHeight = heightCtrl.value();
 
 			if (win.find('#constrain')[0].checked() && width && height && newWidth && newHeight) {
-				if (e.control == widthCtrl) {
+				if (width != newWidth) {
 					newHeight = Math.round((newWidth / width) * newHeight);
 					heightCtrl.value(newHeight);
 				} else {
@@ -118,7 +164,14 @@ tinymce.PluginManager.add('image', function(editor) {
 				imgElm.onerror = selectImage;
 			}
 
-			var data = win.toJSON();
+			updateStyle();
+			recalcSize();
+
+			data = tinymce.extend(data, win.toJSON());
+
+			if (!data.alt) {
+				data.alt = '';
+			}
 
 			if (data.width === '') {
 				data.width = null;
@@ -128,7 +181,7 @@ tinymce.PluginManager.add('image', function(editor) {
 				data.height = null;
 			}
 
-			if (data.style === '') {
+			if (!data.style) {
 				data.style = null;
 			}
 
@@ -137,13 +190,19 @@ tinymce.PluginManager.add('image', function(editor) {
 				alt: data.alt,
 				width: data.width,
 				height: data.height,
-				style: data.style
+				style: data.style,
+				"class": data["class"]
 			};
+
+			if (!data["class"]) {
+				delete data["class"];
+			}
 
 			editor.undoManager.transact(function() {
 				if (!data.src) {
 					if (imgElm) {
 						dom.remove(imgElm);
+						editor.focus();
 						editor.nodeChanged();
 					}
 
@@ -152,6 +211,7 @@ tinymce.PluginManager.add('image', function(editor) {
 
 				if (!imgElm) {
 					data.id = '__mcenew';
+					editor.focus();
 					editor.selection.setContent(dom.createHTML('img', data));
 					imgElm = dom.get('__mcenew');
 					dom.setAttrib(imgElm, 'id', null);
@@ -194,6 +254,7 @@ tinymce.PluginManager.add('image', function(editor) {
 			data = {
 				src: dom.getAttrib(imgElm, 'src'),
 				alt: dom.getAttrib(imgElm, 'alt'),
+				"class": dom.getAttrib(imgElm, 'class'),
 				width: width,
 				height: height
 			};
@@ -214,7 +275,7 @@ tinymce.PluginManager.add('image', function(editor) {
 						altCtrl.value(e.control.text());
 					}
 
-					win.find('#src').value(e.control.value());
+					win.find('#src').value(e.control.value()).fire('change');
 				},
 				onPostRender: function() {
 					imageListCtrl = this;
@@ -222,12 +283,27 @@ tinymce.PluginManager.add('image', function(editor) {
 			};
 		}
 
+		if (editor.settings.image_class_list) {
+			classListCtrl = {
+				name: 'class',
+				type: 'listbox',
+				label: 'Class',
+				values: applyPreview(buildValues('image_class_list', 'class'))
+			};
+		}
+
 		// General settings shared between simple and advanced dialogs
 		var generalFormItems = [
 			{name: 'src', type: 'filepicker', filetype: 'image', label: 'Source', autofocus: true, onchange: srcChange},
-			imageListCtrl,
-			{name: 'alt', type: 'textbox', label: 'Image description'},
-			{
+			imageListCtrl
+		];
+
+		if (editor.settings.image_description !== false) {
+			generalFormItems.push({name: 'alt', type: 'textbox', label: 'Image description'});
+		}
+
+		if (editor.settings.image_dimensions !== false) {
+			generalFormItems.push({
 				type: 'container',
 				label: 'Dimensions',
 				layout: 'flex',
@@ -235,13 +311,15 @@ tinymce.PluginManager.add('image', function(editor) {
 				align: 'center',
 				spacing: 5,
 				items: [
-					{name: 'width', type: 'textbox', maxLength: 3, size: 3, onchange: recalcSize},
+					{name: 'width', type: 'textbox', maxLength: 5, size: 3, onchange: recalcSize, ariaLabel: 'Width'},
 					{type: 'label', text: 'x'},
-					{name: 'height', type: 'textbox', maxLength: 3, size: 3, onchange: recalcSize},
+					{name: 'height', type: 'textbox', maxLength: 5, size: 3, onchange: recalcSize, ariaLabel: 'Height'},
 					{name: 'constrain', type: 'checkbox', checked: true, text: 'Constrain proportions'}
 				]
-			}
-		];
+			});
+		}
+
+		generalFormItems.push(classListCtrl);
 
 		function updateStyle() {
 			function addPixelSuffix(value) {
@@ -250,6 +328,10 @@ tinymce.PluginManager.add('image', function(editor) {
 				}
 
 				return value;
+			}
+
+			if (!editor.settings.image_advtab) {
+				return;
 			}
 
 			var data = win.toJSON();
