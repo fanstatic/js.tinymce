@@ -4,7 +4,7 @@ CHANGES
 4.0.29 (unreleased)
 ===================
 
-- Nothing changed yet.
+- Updated to TinyMCE version 4.1.5.
 
 
 4.0.28 (2014-06-11)
