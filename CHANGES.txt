@@ -1,8 +1,8 @@
 CHANGES
 *******
 
-4.0.29 (unreleased)
-===================
+4.1.5 (2014-10-16)
+==================
 
 - Updated to TinyMCE version 4.1.5.
 
