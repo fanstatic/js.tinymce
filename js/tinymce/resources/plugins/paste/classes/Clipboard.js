@@ -1,8 +1,8 @@
 /**
  * Clipboard.js
  *
- * Copyright, Moxiecode Systems AB
  * Released under LGPL License.
+ * Copyright (c) 1999-2015 Ephox Corp. All rights reserved
  *
  * License: http://www.tinymce.com/license
  * Contributing: http://www.tinymce.com/contributing
@@ -29,12 +29,14 @@
  */
 define("tinymce/pasteplugin/Clipboard", [
 	"tinymce/Env",
+	"tinymce/dom/RangeUtils",
 	"tinymce/util/VK",
 	"tinymce/pasteplugin/Utils"
-], function(Env, VK, Utils) {
+], function(Env, RangeUtils, VK, Utils) {
 	return function(editor) {
 		var self = this, pasteBinElm, lastRng, keyboardPasteTimeStamp = 0, draggingInternally = false;
 		var pasteBinDefaultContent = '%MCEPASTEBIN%', keyboardPastePlainTextState;
+		var mceInternalUrlPrefix = 'data:text/mce-internal,';
 
 		/**
 		 * Pastes the specified HTML. This means that the HTML is filtered and then
@@ -63,7 +65,7 @@ define("tinymce/pasteplugin/Clipboard", [
 				}
 
 				if (!args.isDefaultPrevented()) {
-					editor.insertContent(html, {merge: editor.settings.paste_merge_formats !== false});
+					editor.insertContent(html, {merge: editor.settings.paste_merge_formats !== false, data: {paste: true}});
 				}
 			}
 		}
@@ -278,32 +280,90 @@ define("tinymce/pasteplugin/Clipboard", [
 		}
 
 		/**
+		 * Some Windows 10/Edge versions will return a double encoded string. This checks if the
+		 * content has this odd encoding and decodes it.
+		 */
+		function decodeEdgeData(data) {
+			var i, out, fingerprint, code;
+
+			// Check if data is encoded
+			fingerprint = [25942, 29554, 28521, 14958];
+			for (i = 0; i < fingerprint.length; i++) {
+				if (data.charCodeAt(i) != fingerprint[i]) {
+					return data;
+				}
+			}
+
+			// Decode UTF-16 to UTF-8
+			out = '';
+			for (i = 0; i < data.length; i++) {
+				code = data.charCodeAt(i);
+
+				/*eslint no-bitwise:0*/
+				out += String.fromCharCode((code & 0x00FF));
+				out += String.fromCharCode((code & 0xFF00) >> 8);
+			}
+
+			// Decode UTF-8
+			return decodeURIComponent(escape(out));
+		}
+
+		/**
+		 * Extracts HTML contents from within a fragment.
+		 */
+		function extractFragment(data) {
+			var idx, startFragment, endFragment;
+
+			startFragment = '<!--StartFragment-->';
+			idx = data.indexOf(startFragment);
+			if (idx !== -1) {
+				data = data.substr(idx + startFragment.length);
+			}
+
+			endFragment = '<!--EndFragment-->';
+			idx = data.indexOf(endFragment);
+			if (idx !== -1) {
+				data = data.substr(0, idx);
+			}
+
+			return data;
+		}
+
+		/**
 		 * Gets various content types out of a datatransfer object.
 		 *
 		 * @param {DataTransfer} dataTransfer Event fired on paste.
 		 * @return {Object} Object with mime types and data for those mime types.
 		 */
 		function getDataTransferItems(dataTransfer) {
-			var data = {};
+			var items = {};
 
 			if (dataTransfer) {
 				// Use old WebKit/IE API
 				if (dataTransfer.getData) {
 					var legacyText = dataTransfer.getData('Text');
 					if (legacyText && legacyText.length > 0) {
-						data['text/plain'] = legacyText;
+						if (legacyText.indexOf(mceInternalUrlPrefix) == -1) {
+							items['text/plain'] = legacyText;
+						}
 					}
 				}
 
 				if (dataTransfer.types) {
 					for (var i = 0; i < dataTransfer.types.length; i++) {
-						var contentType = dataTransfer.types[i];
-						data[contentType] = dataTransfer.getData(contentType);
+						var contentType = dataTransfer.types[i],
+							data = dataTransfer.getData(contentType);
+
+						if (contentType == 'text/html') {
+							data = extractFragment(decodeEdgeData(data));
+						}
+
+						items[contentType] = data;
 					}
 				}
 			}
 
-			return data;
+			return items;
 		}
 
 		/**
@@ -329,9 +389,9 @@ define("tinymce/pasteplugin/Clipboard", [
 			var dataTransfer = e.clipboardData || e.dataTransfer;
 
 			function processItems(items) {
-				var i, item, reader;
+				var i, item, reader, hadImage = false;
 
-				function pasteImage() {
+				function pasteImage(reader) {
 					if (rng) {
 						editor.selection.setRng(rng);
 						rng = null;
@@ -344,16 +404,18 @@ define("tinymce/pasteplugin/Clipboard", [
 					for (i = 0; i < items.length; i++) {
 						item = items[i];
 
-						if (/^image\/(jpeg|png|gif)$/.test(item.type)) {
+						if (/^image\/(jpeg|png|gif|bmp)$/.test(item.type)) {
 							reader = new FileReader();
-							reader.onload = pasteImage;
+							reader.onload = pasteImage.bind(null, reader);
 							reader.readAsDataURL(item.getAsFile ? item.getAsFile() : item);
 
 							e.preventDefault();
-							return true;
+							hadImage = true;
 						}
 					}
 				}
+
+				return hadImage;
 			}
 
 			if (editor.settings.paste_data_images && dataTransfer) {
@@ -362,40 +424,19 @@ define("tinymce/pasteplugin/Clipboard", [
 		}
 
 		/**
-		 * Chrome on Andoid doesn't support proper clipboard access so we have no choice but to allow the browser default behavior.
+		 * Chrome on Android doesn't support proper clipboard access so we have no choice but to allow the browser default behavior.
 		 *
 		 * @param {Event} e Paste event object to check if it contains any data.
 		 * @return {Boolean} true/false if the clipboard is empty or not.
 		 */
-		function isBrokenAndoidClipboardEvent(e) {
+		function isBrokenAndroidClipboardEvent(e) {
 			var clipboardData = e.clipboardData;
 
 			return navigator.userAgent.indexOf('Android') != -1 && clipboardData && clipboardData.items && clipboardData.items.length === 0;
 		}
 
 		function getCaretRangeFromEvent(e) {
-			var doc = editor.getDoc(), rng, point;
-
-			if (doc.caretPositionFromPoint) {
-				point = doc.caretPositionFromPoint(e.clientX, e.clientY);
-				rng = doc.createRange();
-				rng.setStart(point.offsetNode, point.offset);
-				rng.collapse(true);
-			} else if (doc.caretRangeFromPoint) {
-				rng = doc.caretRangeFromPoint(e.clientX, e.clientY);
-			} else if (doc.body.createTextRange) {
-				rng = doc.body.createTextRange();
-
-				try {
-					rng.moveToPoint(e.clientX, e.clientY);
-					rng.collapse(true);
-				} catch (ex) {
-					// Append to top or bottom depending on drop location
-					rng.collapse(e.clientY < doc.body.clientHeight);
-				}
-			}
-
-			return rng;
+			return RangeUtils.getCaretRangeFromPoint(e.clientX, e.clientY, editor.getDoc());
 		}
 
 		function hasContentType(clipboardContent, mimeType) {
@@ -461,7 +502,7 @@ define("tinymce/pasteplugin/Clipboard", [
 
 				keyboardPastePlainTextState = false;
 
-				if (e.isDefaultPrevented() || isBrokenAndoidClipboardEvent(e)) {
+				if (e.isDefaultPrevented() || isBrokenAndroidClipboardEvent(e)) {
 					removePasteBin();
 					return;
 				}
@@ -590,16 +631,8 @@ define("tinymce/pasteplugin/Clipboard", [
 			});
 
 			editor.on('dragover dragend', function(e) {
-				var i, dataTransfer = e.dataTransfer;
-
-				if (editor.settings.paste_data_images && dataTransfer) {
-					for (i = 0; i < dataTransfer.types.length; i++) {
-						// Prevent default if we have files dragged into the editor since the pasteImageData handles that
-						if (dataTransfer.types[i] == "Files") {
-							e.preventDefault();
-							return false;
-						}
-					}
+				if (editor.settings.paste_data_images) {
+					e.preventDefault();
 				}
 			});
 		}
@@ -612,19 +645,40 @@ define("tinymce/pasteplugin/Clipboard", [
 
 			// Remove all data images from paste for example from Gecko
 			// except internal images like video elements
-			editor.parser.addNodeFilter('img', function(nodes) {
-				if (!editor.settings.paste_data_images) {
+			editor.parser.addNodeFilter('img', function(nodes, name, args) {
+				function isPasteInsert(args) {
+					return args.data && args.data.paste === true;
+				}
+
+				function remove(node) {
+					if (!node.attr('data-mce-object') && src !== Env.transparentSrc) {
+						node.remove();
+					}
+				}
+
+				function isWebKitFakeUrl(src) {
+					return src.indexOf("webkit-fake-url") === 0;
+				}
+
+				function isDataUri(src) {
+					return src.indexOf("data:") === 0;
+				}
+
+				if (!editor.settings.paste_data_images && isPasteInsert(args)) {
 					var i = nodes.length;
 
 					while (i--) {
 						var src = nodes[i].attributes.map.src;
 
-						// Some browsers automatically produce data uris on paste
+						if (!src) {
+							continue;
+						}
+
 						// Safari on Mac produces webkit-fake-url see: https://bugs.webkit.org/show_bug.cgi?id=49141
-						if (src && /^(data:image|webkit\-fake\-url)/.test(src)) {
-							if (!nodes[i].attr('data-mce-object') && src !== Env.transparentSrc) {
-								nodes[i].remove();
-							}
+						if (isWebKitFakeUrl(src)) {
+							remove(nodes[i]);
+						} else if (!editor.settings.allow_html_data_urls && isDataUri(src)) {
+							remove(nodes[i]);
 						}
 					}
 				}

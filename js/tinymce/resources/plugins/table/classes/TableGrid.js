@@ -1,8 +1,8 @@
 /**
  * TableGrid.js
  *
- * Copyright, Moxiecode Systems AB
  * Released under LGPL License.
+ * Copyright (c) 1999-2015 Ephox Corp. All rights reserved
  *
  * License: http://www.tinymce.com/license
  * Contributing: http://www.tinymce.com/contributing
@@ -18,16 +18,17 @@
  */
 define("tinymce/tableplugin/TableGrid", [
 	"tinymce/util/Tools",
-	"tinymce/Env"
-], function(Tools, Env) {
-	var each = Tools.each;
-
-	function getSpanVal(td, name) {
-		return parseInt(td.getAttribute(name) || 1, 10);
-	}
+	"tinymce/Env",
+	"tinymce/tableplugin/Utils"
+], function(Tools, Env, Utils) {
+	var each = Tools.each, getSpanVal = Utils.getSpanVal;
 
 	return function(editor, table) {
 		var grid, gridWidth, startPos, endPos, selectedCell, selection = editor.selection, dom = selection.dom;
+
+		function isEditorBody(node) {
+			return node === editor.getBody();
+		}
 
 		function buildGrid() {
 			var startY = 0;
@@ -130,6 +131,10 @@ define("tinymce/tableplugin/TableGrid", [
 		function deleteTable() {
 			var rng = dom.createRng();
 
+			if (isEditorBody(table)) {
+				return;
+			}
+
 			rng.setStartAfter(table);
 			rng.setEndAfter(table);
 
@@ -185,9 +190,7 @@ define("tinymce/tableplugin/TableGrid", [
 			if (formatNode) {
 				cell.appendChild(formatNode);
 			} else {
-				if (!Env.ie || Env.ie > 10) {
-					cell.innerHTML = '<br data-mce-bogus="1" />';
-				}
+				Utils.paddCell(cell);
 			}
 
 			return cell;
@@ -506,6 +509,10 @@ define("tinymce/tableplugin/TableGrid", [
 		function deleteCols() {
 			var cols = [];
 
+			if (isEditorBody(table) && grid[0].length == 1) {
+				return;
+			}
+
 			// Get selected column indexes
 			each(grid, function(row) {
 				each(row, function(cell, x) {
@@ -571,6 +578,10 @@ define("tinymce/tableplugin/TableGrid", [
 			// Get selected rows and move selection out of scope
 			rows = getSelectedRows();
 
+			if (isEditorBody(table) && rows.length == table.rows.length) {
+				return;
+			}
+
 			// Delete all selected rows
 			each(rows.reverse(), function(tr) {
 				deleteRow(tr);
@@ -581,6 +592,10 @@ define("tinymce/tableplugin/TableGrid", [
 
 		function cutRows() {
 			var rows = getSelectedRows();
+
+			if (isEditorBody(table) && rows.length == table.rows.length) {
+				return;
+			}
 
 			dom.remove(rows);
 			cleanup();
@@ -670,7 +685,7 @@ define("tinymce/tableplugin/TableGrid", [
 			each(grid, function(row, y) {
 				each(row, function(cell, x) {
 					if (cell.elm == target) {
-						pos = {x : x, y : y};
+						pos = {x: x, y: y};
 						return false;
 					}
 				});
@@ -725,7 +740,7 @@ define("tinymce/tableplugin/TableGrid", [
 				});
 			});
 
-			return {x : maxX, y : maxY};
+			return {x: maxX, y: maxY};
 		}
 
 		function setEndCell(cell) {
@@ -832,11 +847,12 @@ define("tinymce/tableplugin/TableGrid", [
 			return false;
 		}
 
-		table = table || dom.getParent(selection.getStart(), 'table');
+		table = table || dom.getParent(selection.getStart(true), 'table');
 
 		buildGrid();
 
-		selectedCell = dom.getParent(selection.getStart(), 'th,td');
+		selectedCell = dom.getParent(selection.getStart(true), 'th,td');
+
 		if (selectedCell) {
 			startPos = getPos(selectedCell);
 			endPos = findEndPos();

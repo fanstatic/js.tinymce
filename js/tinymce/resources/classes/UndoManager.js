@@ -1,23 +1,24 @@
 /**
  * UndoManager.js
  *
- * Copyright, Moxiecode Systems AB
  * Released under LGPL License.
+ * Copyright (c) 1999-2015 Ephox Corp. All rights reserved
  *
  * License: http://www.tinymce.com/license
  * Contributing: http://www.tinymce.com/contributing
  */
 
 /**
- * This class handles the undo/redo history levels for the editor. Since the build in undo/redo has major drawbacks a custom one was needed.
+ * This class handles the undo/redo history levels for the editor. Since the built-in undo/redo has major drawbacks a custom one was needed.
  *
  * @class tinymce.UndoManager
  */
 define("tinymce/UndoManager", [
+	"tinymce/util/VK",
 	"tinymce/Env",
 	"tinymce/util/Tools",
 	"tinymce/html/SaxParser"
-], function(Env, Tools, SaxParser) {
+], function(VK, Env, Tools, SaxParser) {
 	var trim = Tools.trim, trimContentRegExp;
 
 	trimContentRegExp = new RegExp([
@@ -64,6 +65,10 @@ define("tinymce/UndoManager", [
 			return trim(content);
 		}
 
+		function setDirty(state) {
+			editor.isNotDirty = !state;
+		}
+
 		function addNonTypingUndoLevel(e) {
 			self.typing = false;
 			self.add({}, e);
@@ -92,7 +97,7 @@ define("tinymce/UndoManager", [
 			}
 		});
 
-		editor.on('ObjectResizeStart', function() {
+		editor.on('ObjectResizeStart Cut', function() {
 			self.beforeChange();
 		});
 
@@ -101,6 +106,12 @@ define("tinymce/UndoManager", [
 
 		editor.on('KeyUp', function(e) {
 			var keyCode = e.keyCode;
+
+			// If key is prevented then don't add undo level
+			// This would happen on keyboard shortcuts for example
+			if (e.isDefaultPrevented()) {
+				return;
+			}
 
 			if ((keyCode >= 33 && keyCode <= 36) || (keyCode >= 37 && keyCode <= 40) || keyCode == 45 || keyCode == 13 || e.ctrlKey) {
 				addNonTypingUndoLevel();
@@ -113,9 +124,9 @@ define("tinymce/UndoManager", [
 
 			// Fire a TypingUndo event on the first character entered
 			if (isFirstTypedCharacter && self.typing) {
-				// Make the it dirty if the content was changed after typing the first character
+				// Make it dirty if the content was changed after typing the first character
 				if (!editor.isDirty()) {
-					editor.isNotDirty = !data[0] || getContent() == data[0].content;
+					setDirty(data[0] && getContent() != data[0].content);
 
 					// Fire initial change event
 					if (!editor.isNotDirty) {
@@ -132,6 +143,12 @@ define("tinymce/UndoManager", [
 		editor.on('KeyDown', function(e) {
 			var keyCode = e.keyCode;
 
+			// If key is prevented then don't add undo level
+			// This would happen on keyboard shortcuts for example
+			if (e.isDefaultPrevented()) {
+				return;
+			}
+
 			// Is caracter positon keys left,right,up,down,home,end,pgdown,pgup,enter
 			if ((keyCode >= 33 && keyCode <= 36) || (keyCode >= 37 && keyCode <= 40) || keyCode == 45) {
 				if (self.typing) {
@@ -141,8 +158,9 @@ define("tinymce/UndoManager", [
 				return;
 			}
 
-			// If key isn't shift,ctrl,alt,capslock,metakey
-			if ((keyCode < 16 || keyCode > 20) && keyCode != 224 && keyCode != 91 && !self.typing) {
+			// If key isn't Ctrl+Alt/AltGr
+			var modKey = (e.ctrlKey && !e.altKey) || e.metaKey;
+			if ((keyCode < 16 || keyCode > 20) && keyCode != 224 && keyCode != 91 && !self.typing && !modKey) {
 				self.beforeChange();
 				self.typing = true;
 				self.add({}, e);
@@ -157,8 +175,8 @@ define("tinymce/UndoManager", [
 		});
 
 		// Add keyboard shortcuts for undo/redo keys
-		editor.addShortcut('ctrl+z', '', 'Undo');
-		editor.addShortcut('ctrl+y,ctrl+shift+z', '', 'Redo');
+		editor.addShortcut('meta+z', '', 'Undo');
+		editor.addShortcut('meta+y,meta+shift+z', '', 'Redo');
 
 		editor.on('AddUndo Undo Redo ClearUndos', function(e) {
 			if (!e.isDefaultPrevented()) {
@@ -166,6 +184,7 @@ define("tinymce/UndoManager", [
 			}
 		});
 
+		/*eslint consistent-this:0 */
 		self = {
 			// Explose for debugging reasons
 			data: data,
@@ -251,7 +270,7 @@ define("tinymce/UndoManager", [
 				editor.fire('AddUndo', args);
 
 				if (index > 0) {
-					editor.isNotDirty = false;
+					setDirty(true);
 					editor.fire('change', args);
 				}
 
@@ -277,7 +296,7 @@ define("tinymce/UndoManager", [
 
 					// Undo to first index then set dirty state to false
 					if (index === 0) {
-						editor.isNotDirty = true;
+						setDirty(false);
 					}
 
 					editor.setContent(level.content, {format: 'raw'});
@@ -303,6 +322,7 @@ define("tinymce/UndoManager", [
 
 					editor.setContent(level.content, {format: 'raw'});
 					editor.selection.moveToBookmark(level.bookmark);
+					setDirty(true);
 
 					editor.fire('redo', {level: level});
 				}
