@@ -24,8 +24,12 @@ define("tinymce/util/Quirks", [
 	"tinymce/html/Node",
 	"tinymce/html/Entities",
 	"tinymce/Env",
-	"tinymce/util/Tools"
-], function(VK, RangeUtils, TreeWalker, NodePath, Node, Entities, Env, Tools) {
+	"tinymce/util/Tools",
+	"tinymce/util/Delay",
+	"tinymce/caret/CaretContainer",
+	"tinymce/caret/CaretPosition",
+	"tinymce/caret/CaretWalker"
+], function(VK, RangeUtils, TreeWalker, NodePath, Node, Entities, Env, Tools, Delay, CaretContainer, CaretPosition, CaretWalker) {
 	return function(editor) {
 		var each = Tools.each, $ = editor.$;
 		var BACKSPACE = VK.BACKSPACE, DELETE = VK.DELETE, dom = editor.dom, selection = editor.selection,
@@ -73,7 +77,7 @@ define("tinymce/util/Quirks", [
 		 * @private
 		 * @param {DragEvent} e Event object
 		 */
-		function setMceInteralContent(e) {
+		function setMceInternalContent(e) {
 			var selectionHtml, internalContent;
 
 			if (e.dataTransfer) {
@@ -211,7 +215,7 @@ define("tinymce/util/Quirks", [
 					return false;
 				}
 
-				for (node = node; node != rootNode && !blockElements[node.nodeName]; node = node.parentNode) {
+				for (; node != rootNode && !blockElements[node.nodeName]; node = node.parentNode) {
 					if (node.nextSibling) {
 						return false;
 					}
@@ -238,6 +242,15 @@ define("tinymce/util/Quirks", [
 
 			function findCaretNode(node, forward, startNode) {
 				var walker, current, nonEmptyElements;
+
+				// Protect against the possibility we are asked to find a caret node relative
+				// to a node that is no longer in the DOM tree. In this case attempting to
+				// select on any match leads to a scenario where selection is completely removed
+				// from the editor. This scenario is met in real world at a minimum on
+				// WebKit browsers when selecting all and Cmd-X cutting to delete content.
+				if (!dom.isChildOf(node, editor.getBody())) {
+					return;
+				}
 
 				nonEmptyElements = dom.schema.getNonEmptyElements();
 
@@ -338,10 +351,11 @@ define("tinymce/util/Quirks", [
 					}
 				}
 
-				caretNode = RangeUtils.getNode(rng.startContainer, rng.startOffset);
+				caretNode = RangeUtils.getNode(container, offset);
 				textBlock = dom.getParent(caretNode, dom.isBlock);
 				targetCaretNode = findCaretNode(editor.getBody(), isForward, caretNode);
 				targetTextBlock = dom.getParent(targetCaretNode, dom.isBlock);
+				var isAfter = container.nodeType === 1 && offset > container.childNodes.length - 1;
 
 				if (!caretNode || !targetCaretNode) {
 					return rng;
@@ -364,7 +378,11 @@ define("tinymce/util/Quirks", [
 						}
 
 						if (caretNode.nodeType == 1) {
-							rng.setEnd(caretNode, 0);
+							if (isAfter) {
+								rng.setEndAfter(caretNode);
+							} else {
+								rng.setEndBefore(caretNode);
+							}
 						} else {
 							rng.setEndBefore(caretNode);
 						}
@@ -558,7 +576,7 @@ define("tinymce/util/Quirks", [
 						}
 					}
 
-					// Remove all spans that isn't maked and retain selection
+					// Remove all spans that aren't marked and retain selection
 					Tools.each(record.addedNodes, function(node) {
 						if (node.nodeName == "SPAN" && !node.getAttribute('mce-data-marked')) {
 							var offset, container;
@@ -584,6 +602,12 @@ define("tinymce/util/Quirks", [
 				// Remove any left over marks
 				Tools.each(editor.dom.select('span[mce-data-marked]'), function(span) {
 					span.removeAttribute('mce-data-marked');
+				});
+			}
+
+			function transactCustomDelete(isForward) {
+				editor.undoManager.transact(function () {
+					customDelete(isForward);
 				});
 			}
 
@@ -693,7 +717,7 @@ define("tinymce/util/Quirks", [
 
 			editor.on('dragstart', function(e) {
 				dragStartRng = selection.getRng();
-				setMceInteralContent(e);
+				setMceInternalContent(e);
 			});
 
 			editor.on('drop', function(e) {
@@ -707,18 +731,18 @@ define("tinymce/util/Quirks", [
 						// produces a green plus icon. When this happens the caretRangeFromPoint
 						// will return "null" even though the x, y coordinate is correct.
 						// But if we detach the insert from the drop event we will get a proper range
-						window.setTimeout(function() {
+						Delay.setEditorTimeout(editor, function() {
 							var pointRng = RangeUtils.getCaretRangeFromPoint(e.x, e.y, doc);
 
 							if (dragStartRng) {
 								selection.setRng(dragStartRng);
 								dragStartRng = null;
+								transactCustomDelete();
 							}
 
-							customDelete();
 							selection.setRng(pointRng);
 							insertClipboardContents(internalContent.html);
-						}, 0);
+						});
 					}
 				}
 			});
@@ -733,9 +757,9 @@ define("tinymce/util/Quirks", [
 					// Needed delay for https://code.google.com/p/chromium/issues/detail?id=363288#c3
 					// Nested delete/forwardDelete not allowed on execCommand("cut")
 					// This is ugly but not sure how to work around it otherwise
-					window.setTimeout(function() {
-						customDelete(true);
-					}, 0);
+					Delay.setEditorTimeout(editor, function() {
+						transactCustomDelete(true);
+					});
 				}
 			});
 		}
@@ -836,21 +860,30 @@ define("tinymce/util/Quirks", [
 		function inputMethodFocus() {
 			if (!editor.settings.content_editable) {
 				// Case 1 IME doesn't initialize if you focus the document
-				dom.bind(editor.getDoc(), 'focusin', function() {
+				// Disabled since it was interferring with the cE=false logic
+				// Also coultn't reproduce the issue on Safari 9
+				/*dom.bind(editor.getDoc(), 'focusin', function() {
 					selection.setRng(selection.getRng());
-				});
+				});*/
 
 				// Case 2 IME doesn't initialize if you click the documentElement it also doesn't properly fire the focusin event
 				// Needs to be both down/up due to weird rendering bug on Chrome Windows
 				dom.bind(editor.getDoc(), 'mousedown mouseup', function(e) {
+					var rng;
+
 					if (e.target == editor.getDoc().documentElement) {
+						rng = selection.getRng();
 						editor.getBody().focus();
 
 						if (e.type == 'mousedown') {
+							if (CaretContainer.isCaretContainer(rng.startContainer)) {
+								return;
+							}
+
 							// Edge case for mousedown, drag select and mousedown again within selection on Chrome Windows to render caret
 							selection.placeCaretAt(e.clientX, e.clientY);
 						} else {
-							selection.setRng(selection.getRng());
+							selection.setRng(rng);
 						}
 					}
 				});
@@ -909,9 +942,9 @@ define("tinymce/util/Quirks", [
 						body.blur();
 
 						// Refocus the body after a little while
-						setTimeout(function() {
+						Delay.setEditorTimeout(editor, function() {
 							body.focus();
-						}, 0);
+						});
 					}
 				});
 			}
@@ -927,10 +960,9 @@ define("tinymce/util/Quirks", [
 
 				// Workaround for bug, http://bugs.webkit.org/show_bug.cgi?id=12250
 				// WebKit can't even do simple things like selecting an image
-				// Needs to be the setBaseAndExtend or it will fail to select floated images
-				if (/^(IMG|HR)$/.test(target.nodeName)) {
+				if (/^(IMG|HR)$/.test(target.nodeName) && dom.getContentEditableParent(target) !== "false") {
 					e.preventDefault();
-					selection.getSel().setBaseAndExtent(target, 0, target, 1);
+					selection.select(target);
 					editor.nodeChanged();
 				}
 
@@ -993,9 +1025,9 @@ define("tinymce/util/Quirks", [
 				if (!isDefaultPrevented(e) && isSelectionAcrossElements()) {
 					applyAttributes = getAttributeApplyFunction();
 
-					setTimeout(function() {
+					Delay.setEditorTimeout(editor, function() {
 						applyAttributes();
-					}, 0);
+					});
 				}
 			});
 		}
@@ -1155,7 +1187,7 @@ define("tinymce/util/Quirks", [
 		 */
 		function setGeckoEditingOptions() {
 			function setOpts() {
-				editor._refreshContentEditable();
+				refreshContentEditable();
 
 				setEditorCommandState("StyleWithCSS", false);
 				setEditorCommandState("enableInlineTableEditing", false);
@@ -1216,17 +1248,6 @@ define("tinymce/util/Quirks", [
 					setEditorCommandState('DefaultParagraphSeparator', settings.forced_root_block);
 				});
 			}
-		}
-
-		/**
-		 * Removes ghost selections from images/tables on Gecko.
-		 */
-		function removeGhostSelection() {
-			editor.on('Undo Redo SetContent', function(e) {
-				if (!e.initial) {
-					editor.execCommand('mceRepaint');
-				}
-			});
 		}
 
 		/**
@@ -1614,7 +1635,7 @@ define("tinymce/util/Quirks", [
 		 */
 		function ieInternalDragAndDrop() {
 			editor.on('dragstart', function(e) {
-				setMceInteralContent(e);
+				setMceInternalContent(e);
 			});
 
 			editor.on('drop', function(e) {
@@ -1632,13 +1653,79 @@ define("tinymce/util/Quirks", [
 			});
 		}
 
+		function refreshContentEditable() {
+			// No-op since Mozilla seems to have fixed the caret repaint issues
+		}
+
+		function isHidden() {
+			var sel;
+
+			if (!isGecko) {
+				return 0;
+			}
+
+			// Weird, wheres that cursor selection?
+			sel = editor.selection.getSel();
+			return (!sel || !sel.rangeCount || sel.rangeCount === 0);
+		}
+
+		/**
+		 * Properly empties the editor if all contents is selected and deleted this to
+		 * prevent empty paragraphs from being produced at beginning/end of contents.
+		 */
+		function emptyEditorOnDeleteEverything() {
+			function isEverythingSelected(editor) {
+				var caretWalker = new CaretWalker(editor.getBody());
+				var rng = editor.selection.getRng();
+				var startCaretPos = CaretPosition.fromRangeStart(rng);
+				var endCaretPos = CaretPosition.fromRangeEnd(rng);
+				var prev = caretWalker.prev(startCaretPos);
+				var next = caretWalker.next(endCaretPos);
+
+				return !editor.selection.isCollapsed() &&
+					(!prev || (prev.isAtStart() && startCaretPos.isEqual(prev))) &&
+					(!next || (next.isAtEnd() && startCaretPos.isEqual(next)));
+			}
+
+			// Type over case delete and insert this won't cover typeover with a IME but at least it covers the common case
+			editor.on('keypress', function (e) {
+				if (!isDefaultPrevented(e) && !selection.isCollapsed() && e.charCode > 31 && !VK.metaKeyPressed(e)) {
+					if (isEverythingSelected(editor)) {
+						e.preventDefault();
+						editor.setContent(String.fromCharCode(e.charCode));
+						editor.selection.select(editor.getBody(), true);
+						editor.selection.collapse(false);
+						editor.nodeChanged();
+					}
+				}
+			});
+
+			editor.on('keydown', function (e) {
+				var keyCode = e.keyCode;
+
+				if (!isDefaultPrevented(e) && (keyCode == DELETE || keyCode == BACKSPACE)) {
+					if (isEverythingSelected(editor)) {
+						e.preventDefault();
+						editor.setContent('');
+						editor.nodeChanged();
+					}
+				}
+			});
+		}
+
 		// All browsers
 		removeBlockQuoteOnBackSpace();
 		emptyEditorWhenDeleting();
-		normalizeSelection();
+
+		// Windows phone will return a range like [body, 0] on mousedown so
+		// it will always normalize to the wrong location
+		if (!Env.windowsPhone) {
+			normalizeSelection();
+		}
 
 		// WebKit
 		if (isWebKit) {
+			emptyEditorOnDeleteEverything();
 			cleanupStylesWhenDeleting();
 			inputMethodFocus();
 			selectControlElements();
@@ -1646,6 +1733,7 @@ define("tinymce/util/Quirks", [
 			blockFormSubmitInsideEditor();
 			disableBackspaceIntoATable();
 			removeAppleInterchangeBrs();
+
 			//touchClickEvent();
 
 			// iOS
@@ -1683,15 +1771,20 @@ define("tinymce/util/Quirks", [
 
 		// Gecko
 		if (isGecko) {
+			emptyEditorOnDeleteEverything();
 			removeHrOnBackspace();
 			focusBody();
 			removeStylesWhenDeletingAcrossBlockElements();
 			setGeckoEditingOptions();
 			addBrAfterLastLinks();
-			removeGhostSelection();
 			showBrokenImageIcon();
 			blockCmdArrowNavigation();
 			disableBackspaceIntoATable();
 		}
+
+		return {
+			refreshContentEditable: refreshContentEditable,
+			isHidden: isHidden
+		};
 	};
 });

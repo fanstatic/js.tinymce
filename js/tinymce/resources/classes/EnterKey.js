@@ -17,8 +17,9 @@
 define("tinymce/EnterKey", [
 	"tinymce/dom/TreeWalker",
 	"tinymce/dom/RangeUtils",
+	"tinymce/caret/CaretContainer",
 	"tinymce/Env"
-], function(TreeWalker, RangeUtils, Env) {
+], function(TreeWalker, RangeUtils, CaretContainer, Env) {
 	var isIE = Env.ie && Env.ie < 11;
 
 	return function(editor) {
@@ -232,7 +233,7 @@ define("tinymce/EnterKey", [
 								block.appendChild(clonedNode);
 							}
 						}
-					} while ((node = node.parentNode));
+					} while ((node = node.parentNode) && node != editableRoot);
 				}
 
 				// BR is needed in empty blocks on non IE browsers
@@ -547,7 +548,7 @@ define("tinymce/EnterKey", [
 				}
 			}
 
-			// Get editable root node normaly the body element but sometimes a div or span
+			// Get editable root node, normally the body element but sometimes a div or span
 			editableRoot = getEditableRoot(container);
 
 			// If there is no editable root then enter is done inside a contentEditable false element
@@ -587,6 +588,11 @@ define("tinymce/EnterKey", [
 				parentBlockName = containerBlockName;
 			}
 
+			if (editor.undoManager.typing) {
+				editor.undoManager.typing = false;
+				editor.undoManager.add();
+			}
+
 			// Handle enter in list item
 			if (/^(LI|DT|DD)$/.test(parentBlockName)) {
 				if (!newBlockName && shiftKey) {
@@ -624,7 +630,13 @@ define("tinymce/EnterKey", [
 			newBlockName = newBlockName || 'P';
 
 			// Insert new block before/after the parent block depending on caret location
-			if (isCaretAtStartOrEndOfBlock()) {
+			if (CaretContainer.isCaretContainerBlock(parentBlock)) {
+				newBlock = CaretContainer.showCaretContainerBlock(parentBlock);
+				if (dom.isEmpty(parentBlock)) {
+					emptyBlock(parentBlock);
+				}
+				moveToCaretPosition(newBlock);
+			} else if (isCaretAtStartOrEndOfBlock()) {
 				insertNewBlockAfter();
 			} else if (isCaretAtStartOrEndOfBlock(true)) {
 				// Insert new block before
@@ -646,6 +658,8 @@ define("tinymce/EnterKey", [
 					emptyBlock(parentBlock);
 				}
 
+				newBlock.normalize();
+
 				// New block might become empty if it's <p><b>a |</b></p>
 				if (dom.isEmpty(newBlock)) {
 					dom.remove(newBlock);
@@ -660,6 +674,7 @@ define("tinymce/EnterKey", [
 			// Allow custom handling of new blocks
 			editor.fire('NewBlock', {newBlock: newBlock});
 
+			undoManager.typing = false;
 			undoManager.add();
 		}
 

@@ -124,8 +124,8 @@ define("tinymce/dom/DOMUtils", [
 	 *
 	 * @constructor
 	 * @method DOMUtils
-	 * @param {Document} d Document reference to bind the utility class to.
-	 * @param {settings} s Optional settings collection.
+	 * @param {Document} doc Document reference to bind the utility class to.
+	 * @param {settings} settings Optional settings collection.
 	 */
 	function DOMUtils(doc, settings) {
 		var self = this, blockElementsMap;
@@ -332,7 +332,7 @@ define("tinymce/dom/DOMUtils", [
 		 * @method getParent
 		 * @param {Node/String} node DOM node to search parents on or ID string.
 		 * @param {function} selector Selection function or CSS selector to execute on each node.
-		 * @param {Node} root Optional root element, never go below this point.
+		 * @param {Node} root Optional root element, never go beyond this point.
 		 * @return {Node} DOM Node or null if it wasn't found.
 		 */
 		getParent: function(node, selector, root) {
@@ -346,7 +346,7 @@ define("tinymce/dom/DOMUtils", [
 		 * @method getParents
 		 * @param {Node/String} node DOM node to search parents on or ID string.
 		 * @param {function} selector Selection function to execute on each node or CSS pattern.
-		 * @param {Node} root Optional root element, never go below this point.
+		 * @param {Node} root Optional root element, never go beyond this point.
 		 * @return {Array} Array of nodes or null if it wasn't found.
 		 */
 		getParents: function(node, selector, root, collect) {
@@ -517,6 +517,7 @@ define("tinymce/dom/DOMUtils", [
 		 * @param {String/Element} name Name of new element to add or existing element to add.
 		 * @param {Object} attrs Optional object collection with arguments to add to the new element(s).
 		 * @param {String} html Optional inner HTML contents to add for each element.
+		 * @param {Boolean} create Optional flag if the element should be created or added.
 		 * @return {Element/Array} Element that got created, or an array of created elements if multiple input elements
 		 * were passed in.
 		 * @example
@@ -659,9 +660,9 @@ define("tinymce/dom/DOMUtils", [
 		 * or the CSS style name like background-color.
 		 *
 		 * @method setStyle
-		 * @param {String/Element/Array} n HTML element/Array of elements to set CSS style value on.
-		 * @param {String} na Name of the style value to set.
-		 * @param {String} v Value to set on the style.
+		 * @param {String/Element/Array} elm HTML element/Array of elements to set CSS style value on.
+		 * @param {String} name Name of the style value to set.
+		 * @param {String} value Value to set on the style.
 		 * @example
 		 * // Sets a style value on all paragraphs in the currently active editor
 		 * tinymce.activeEditor.dom.setStyle(tinymce.activeEditor.dom.select('p'), 'background-color', 'red');
@@ -709,8 +710,8 @@ define("tinymce/dom/DOMUtils", [
 		 * Sets multiple styles on the specified element(s).
 		 *
 		 * @method setStyles
-		 * @param {Element/String/Array} e DOM element, element id string or array of elements/ids to set styles on.
-		 * @param {Object} o Name/Value collection of style items to add to the element(s).
+		 * @param {Element/String/Array} elm DOM element, element id string or array of elements/ids to set styles on.
+		 * @param {Object} styles Name/Value collection of style items to add to the element(s).
 		 * @example
 		 * // Sets styles on all paragraphs in the currently active editor
 		 * tinymce.activeEditor.dom.setStyles(tinymce.activeEditor.dom.select('p'), {'background-color': 'red', 'color': 'green'});
@@ -745,9 +746,10 @@ define("tinymce/dom/DOMUtils", [
 		 * Sets the specified attribute of an element or elements.
 		 *
 		 * @method setAttrib
-		 * @param {Element/String/Array} e DOM element, element id string or array of elements/ids to set attribute on.
-		 * @param {String} n Name of attribute to set.
-		 * @param {String} v Value to set on the attribute - if this value is falsy like null, 0 or '' it will remove the attribute instead.
+		 * @param {Element/String/Array} elm DOM element, element id string or array of elements/ids to set attribute on.
+		 * @param {String} name Name of attribute to set.
+		 * @param {String} value Value to set on the attribute - if this value is falsy like null, 0 or '' it will remove
+		 * the attribute instead.
 		 * @example
 		 * // Sets class attribute on all paragraphs in the active editor
 		 * tinymce.activeEditor.dom.setAttrib(tinymce.activeEditor.dom.select('p'), 'class', 'myclass');
@@ -960,7 +962,7 @@ define("tinymce/dom/DOMUtils", [
 		 * Imports/loads the specified CSS file into the document bound to the class.
 		 *
 		 * @method loadCSS
-		 * @param {String} u URL to CSS file to load.
+		 * @param {String} url URL to CSS file to load.
 		 * @example
 		 * // Loads a CSS file dynamically into the current document
 		 * tinymce.DOM.loadCSS('somepath/some.css');
@@ -1059,8 +1061,8 @@ define("tinymce/dom/DOMUtils", [
 		 * Returns true if the specified element has the specified class.
 		 *
 		 * @method hasClass
-		 * @param {String/Element} n HTML element or element id string to check CSS class on.
-		 * @param {String} c CSS class to check for.
+		 * @param {String/Element} elm HTML element or element id string to check CSS class on.
+		 * @param {String} cls CSS class to check for.
 		 * @return {Boolean} true/false if the specified element has the specified class.
 		 */
 		hasClass: function(elm, cls) {
@@ -1097,7 +1099,7 @@ define("tinymce/dom/DOMUtils", [
 		 * Hides the specified element(s) by ID by setting the "display" style.
 		 *
 		 * @method hide
-		 * @param {String/Element/Array} e ID of DOM element or DOM element or array with elements or IDs to hide.
+		 * @param {String/Element/Array} elm ID of DOM element or DOM element or array with elements or IDs to hide.
 		 * @example
 		 * // Hides an element by id in the document
 		 * tinymce.DOM.hide('myid');
@@ -1110,7 +1112,7 @@ define("tinymce/dom/DOMUtils", [
 		 * Returns true/false if the element is hidden or not by checking the "display" style.
 		 *
 		 * @method isHidden
-		 * @param {String/Element} e Id or element to check display state on.
+		 * @param {String/Element} elm Id or element to check display state on.
 		 * @return {Boolean} true/false if the element is hidden or not.
 		 */
 		isHidden: function(elm) {
@@ -1135,7 +1137,7 @@ define("tinymce/dom/DOMUtils", [
 		 *
 		 * @method setHTML
 		 * @param {Element/String/Array} elm DOM element, element id string or array of elements/ids to set HTML inside of.
-		 * @param {String} h HTML content to set as inner HTML of the element.
+		 * @param {String} html HTML content to set as inner HTML of the element.
 		 * @example
 		 * // Sets the inner HTML of all paragraphs in the active editor
 		 * tinymce.activeEditor.dom.setHTML(tinymce.activeEditor.dom.select('p'), 'some inner html');
@@ -1164,7 +1166,7 @@ define("tinymce/dom/DOMUtils", [
 						target.removeChild(target.firstChild);
 					} catch (ex) {
 						// IE sometimes produces an unknown runtime error on innerHTML if it's a div inside a p
-						$('<div>').html('<br>' + html).contents().slice(1).appendTo(target);
+						$('<div></div>').html('<br>' + html).contents().slice(1).appendTo(target);
 					}
 
 					return html;
@@ -1188,7 +1190,7 @@ define("tinymce/dom/DOMUtils", [
 			elm = this.get(elm);
 
 			// Older FF doesn't have outerHTML 3.6 is still used by some orgaizations
-			return elm.nodeType == 1 && "outerHTML" in elm ? elm.outerHTML : $('<div>').append($(elm).clone()).html();
+			return elm.nodeType == 1 && "outerHTML" in elm ? elm.outerHTML : $('<div></div>').append($(elm).clone()).html();
 		},
 
 		/**
@@ -1197,7 +1199,6 @@ define("tinymce/dom/DOMUtils", [
 		 * @method setOuterHTML
 		 * @param {Element/String/Array} elm DOM element, element id string or array of elements/ids to set outer HTML on.
 		 * @param {Object} html HTML code to set as outer value for the element.
-		 * @param {Document} doc Optional document scope to use in this process - defaults to the document of the DOM class.
 		 * @example
 		 * // Sets the outer HTML of all paragraphs in the active editor
 		 * tinymce.activeEditor.dom.setOuterHTML(tinymce.activeEditor.dom.select('p'), '<div>some html</div>');
@@ -1210,7 +1211,7 @@ define("tinymce/dom/DOMUtils", [
 
 			self.$$(elm).each(function() {
 				try {
-					// Older FF doesn't have outerHTML 3.6 is still used by some orgaizations
+					// Older FF doesn't have outerHTML 3.6 is still used by some organizations
 					if ("outerHTML" in this) {
 						this.outerHTML = html;
 						return;
@@ -1247,7 +1248,7 @@ define("tinymce/dom/DOMUtils", [
 		 *
 		 * @method insertAfter
 		 * @param {Element} node Element to insert after the reference.
-		 * @param {Element/String/Array} reference_node Reference element, element id or array of elements to insert after.
+		 * @param {Element/String/Array} referenceNode Reference element, element id or array of elements to insert after.
 		 * @return {Element/Array} Element that got added or an array with elements.
 		 */
 		insertAfter: function(node, referenceNode) {
@@ -1275,8 +1276,9 @@ define("tinymce/dom/DOMUtils", [
 		 *
 		 * @method replace
 		 * @param {Element} newElm New element to replace old ones with.
-		 * @param {Element/String/Array} oldELm Element DOM node, element id or array of elements or ids to replace.
-		 * @param {Boolean} k Optional keep children state, if set to true child nodes from the old object will be added to new ones.
+		 * @param {Element/String/Array} oldElm Element DOM node, element id or array of elements or ids to replace.
+		 * @param {Boolean} keepChildren Optional keep children state, if set to true child nodes from the old object will be added
+		 * to new ones.
 		 */
 		replace: function(newElm, oldElm, keepChildren) {
 			var self = this;
@@ -1370,9 +1372,9 @@ define("tinymce/dom/DOMUtils", [
 		 * Executes the specified function on the element by id or dom element node or array of elements/id.
 		 *
 		 * @method run
-		 * @param {String/Element/Array} Element ID or DOM element object or array with ids or elements.
-		 * @param {function} f Function to execute for each item.
-		 * @param {Object} s Optional scope to execute the function in.
+		 * @param {String/Element/Array} elm ID or DOM element object or array with ids or elements.
+		 * @param {function} func Function to execute for each item.
+		 * @param {Object} scope Optional scope to execute the function in.
 		 * @return {Object/Array} Single object, or an array of objects if multiple input elements were passed in.
 		 */
 		run: function(elm, func, scope) {
@@ -1457,19 +1459,22 @@ define("tinymce/dom/DOMUtils", [
 		 * @return {Boolean} true/false if the node is empty or not.
 		 */
 		isEmpty: function(node, elements) {
-			var self = this, i, attributes, type, walker, name, brCount = 0;
+			var self = this, i, attributes, type, whitespace, walker, name, brCount = 0;
 
 			node = node.firstChild;
 			if (node) {
 				walker = new TreeWalker(node, node.parentNode);
 				elements = elements || (self.schema ? self.schema.getNonEmptyElements() : null);
+				whitespace = self.schema ? self.schema.getWhiteSpaceElements() : {};
 
 				do {
 					type = node.nodeType;
 
 					if (type === 1) {
 						// Ignore bogus elements
-						if (node.getAttribute('data-mce-bogus')) {
+						var bogusVal = node.getAttribute('data-mce-bogus');
+						if (bogusVal) {
+							node = walker.next(bogusVal === 'all');
 							continue;
 						}
 
@@ -1479,6 +1484,7 @@ define("tinymce/dom/DOMUtils", [
 							// Ignore single BR elements in blocks like <p><br /></p> or <p><span><br /></span></p>
 							if (name === 'br') {
 								brCount++;
+								node = walker.next();
 								continue;
 							}
 
@@ -1502,10 +1508,17 @@ define("tinymce/dom/DOMUtils", [
 					}
 
 					// Keep non whitespace text nodes
-					if ((type === 3 && !whiteSpaceRegExp.test(node.nodeValue))) {
+					if (type === 3 && !whiteSpaceRegExp.test(node.nodeValue)) {
 						return false;
 					}
-				} while ((node = walker.next()));
+
+					// Keep whitespace preserve elements
+					if (type === 3 && node.parentNode && whitespace[node.parentNode.nodeName] && whiteSpaceRegExp.test(node.nodeValue)) {
+						return false;
+					}
+
+					node = walker.next();
+				} while (node);
 			}
 
 			return brCount <= 1;
@@ -1626,7 +1639,8 @@ define("tinymce/dom/DOMUtils", [
 
 				// Insert middle chunk
 				if (replacementElm) {
-					pa.replaceChild(replacementElm, splitElm);
+					pa.insertBefore(replacementElm, parentElm);
+					//pa.replaceChild(replacementElm, splitElm);
 				} else {
 					pa.insertBefore(splitElm, parentElm);
 				}

@@ -129,13 +129,15 @@
 	exports.require = require;
 
 	load('classes/Utils.js');
+	load('classes/SplitCols.js');
 	load('classes/TableGrid.js');
 	load('classes/Quirks.js');
 	load('classes/CellSelection.js');
 	load('classes/Dialogs.js');
+	load('classes/ResizeBars.js');
 	load('classes/Plugin.js');
 
 	writeScripts();
 })(this);
 
-// $hash: 008bf0c5a8651233e9d51516657d3eaa
+// $hash: df9873b15bbd1f68ee6d3471722868c1

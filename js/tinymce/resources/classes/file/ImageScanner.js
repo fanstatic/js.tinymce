@@ -17,15 +17,20 @@
 define("tinymce/file/ImageScanner", [
 	"tinymce/util/Promise",
 	"tinymce/util/Arr",
+	"tinymce/util/Fun",
 	"tinymce/file/Conversions",
 	"tinymce/Env"
-], function(Promise, Arr, Conversions, Env) {
+], function(Promise, Arr, Fun, Conversions, Env) {
 	var count = 0;
 
-	return function(blobCache) {
+	var uniqueId = function(prefix) {
+		return (prefix || 'blobid') + (count++);
+	};
+
+	return function(uploadStatus, blobCache) {
 		var cachedPromises = {};
 
-		function findAll(elm) {
+		function findAll(elm, predicate) {
 			var images, promises;
 
 			function imageToBlobInfo(img, resolve) {
@@ -38,6 +43,19 @@ define("tinymce/file/ImageScanner", [
 						resolve({
 							image: img,
 							blobInfo: blobInfo
+						});
+					} else {
+						Conversions.uriToBlob(img.src).then(function (blob) {
+							Conversions.blobToDataUri(blob).then(function (dataUri) {
+								base64 = Conversions.parseDataUri(dataUri).data;
+								blobInfo = blobCache.create(uniqueId(), blob, base64);
+								blobCache.add(blobInfo);
+
+								resolve({
+									image: img,
+									blobInfo: blobInfo
+								});
+							});
 						});
 					}
 
@@ -56,9 +74,7 @@ define("tinymce/file/ImageScanner", [
 					});
 				} else {
 					Conversions.uriToBlob(img.src).then(function(blob) {
-						var blobInfoId = 'blobid' + (count++),
-							blobInfo = blobCache.create(blobInfoId, blob, base64);
-
+						blobInfo = blobCache.create(uniqueId(), blob, base64);
 						blobCache.add(blobInfo);
 
 						resolve({
@@ -67,6 +83,10 @@ define("tinymce/file/ImageScanner", [
 						});
 					});
 				}
+			}
+
+			if (!predicate) {
+				predicate = Fun.constant(true);
 			}
 
 			images = Arr.filter(elm.getElementsByTagName('img'), function(img) {
@@ -88,7 +108,15 @@ define("tinymce/file/ImageScanner", [
 					return false;
 				}
 
-				return src.indexOf('data:') === 0 || src.indexOf('blob:') === 0;
+				if (src.indexOf('blob:') === 0) {
+					return !uploadStatus.isUploaded(src);
+				}
+
+				if (src.indexOf('data:') === 0) {
+					return predicate(img);
+				}
+
+				return false;
 			});
 
 			promises = Arr.map(images, function(img) {
