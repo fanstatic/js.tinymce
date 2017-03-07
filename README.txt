@@ -7,7 +7,7 @@ Introduction
 This library packages `TinyMCE`_ for `fanstatic`_.
 
 .. _`fanstatic`: http://fanstatic.org
-.. _`TinyMCE`: http://tinymce.moxiecode.com
+.. _`TinyMCE`: https://www.tinymce.com
 
 This requires integration between your web framework and ``fanstatic``,
 and making sure that the original resources (shipped in the ``resources``
