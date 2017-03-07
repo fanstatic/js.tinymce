@@ -1,4 +1,11 @@
 recursive-include js/tinymce/resources *.*
 recursive-include js/tinymce *.txt
 include *.txt
+
 include *.py
+exclude bootstrap.py
+
+include buildout.cfg
+exclude buildout.cfg
+
+exclude MANIFEST.in
