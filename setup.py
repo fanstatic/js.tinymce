@@ -10,6 +10,7 @@ import os
 
 version = '4.5.4.dev0'
 
+
 def read(*rnames):
     return open(os.path.join(os.path.dirname(__file__), *rnames)).read()
 
@@ -37,10 +38,10 @@ setup(
     install_requires=[
         'fanstatic',
         'setuptools',
-        ],
+    ],
     entry_points={
         'fanstatic.libraries': [
             'tinymce = js.tinymce:library',
-            ],
-        },
-    )
+        ],
+    },
+)
